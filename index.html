@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title></title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.0/jquery.min.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.0.1/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.0.1/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://npmcdn.com/csv2geojson@latest/csv2geojson.js"></script>
+  <script src="https://npmcdn.com/@turf/turf/turf.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+    }
+
+    /* Popup styling */
+    .mapboxgl-popup {
+      padding-bottom: 5px;
+    }
+
+    .mapboxgl-popup-close-button {
+      display: none;
+    }
+
+    .mapboxgl-popup-content {
+      font: 400 15px/22px 'Source Sans Pro', 'Helvetica Neue', Sans-serif;
+      padding: 0;
+      width: 250px;
+    }
+
+    .mapboxgl-popup-content-wrapper {
+      padding: 1%;
+    }
+
+    .mapboxgl-popup-content h3 {
+      background: rgb(61, 59, 59);
+      text-align: center;
+      color: #fff;
+      margin: 0;
+      display: block;
+      padding: 15px;
+      font-weight: 700;
+      margin-top: -5px;
+    }
+
+    .mapboxgl-popup-content h4 {
+      margin: 0;
+      display: block;
+      padding: 10px 3px 10px 10px;
+      font-weight: 400;
+    }
+
+    .mapboxgl-container {
+      cursor: pointer;
+    }
+
+    .mapboxgl-popup-anchor-top > .mapboxgl-popup-content {
+      margin-top: 3px;
+    }
+
+    .mapboxgl-popup-anchor-top > .mapboxgl-popup-tip {
+      border-bottom-color: rgb(61, 59, 59);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+  <script>
+    var transformRequest = (url, resourceType) => {
+      var isMapboxRequest =
+        url.slice(8, 22) === "api.mapbox.com" ||
+        url.slice(10, 26) === "tiles.mapbox.com";
+      return {
+        url: isMapboxRequest
+          ? url.replace("?", "?pluginName=sheetMapper&")
+          : url,
+      };
+    };
+
+    mapboxgl.accessToken = 'pk.eyJ1Ijoibmljb2xhbWF6enVjY2hpIiwiYSI6ImNsaWFnbGdiZDAzZm4za29ieThoNTgzeHcifQ.uYMvqDzOfGAEs_QU2QzzkA'; //Mapbox token
+    var map = new mapboxgl.Map({
+      container: 'map', // container id
+      style: 'mapbox://styles/nicolamazzucchi/cliagrt3k02vo01pn474hh1ba', // YOUR TURN: choose a style: https://docs.mapbox.com/api/maps/#styles
+      center: [-8.736027, 49.311425], // starting position [lng, lat]
+      zoom: 5, // starting zoom
+      transformRequest: transformRequest,
+    });
+
+    $(document).ready(function () {
+      $.ajax({
+        type: "GET",
+        url: 'https://docs.google.com/spreadsheets/d/1ZdiG6AE4vFCgRa67e9Q0nPb51VZ5sHrtkl9UQsty3AA/gviz/tq?tqx=out:csv&sheet=Sheet1', // Original CSV export link
+        dataType: "text",
+        success: function (csvData) {
+          makeGeoJSON(csvData);
+        },
+      });
+
+      $.ajax({
+        type: "GET",
+        url: 'https://docs.google.com/spreadsheets/d/1GIqFrKIzSFHJEHBYxjZGt5YTvU8E-jYX_JBgIfK5fOc/gviz/tq?tqx=out:csv&sheet=Sheet1', // Another CSV export link
+        dataType: "text",
+        success: function (csvData) {
+          makeGeoJSONDuplicate(csvData);
+        },
+      });
+
+      function makeGeoJSON(csvData) {
+        csv2geojson.csv2geojson(csvData, {
+          latfield: 'Latitude',
+          lonfield: 'Longitude',
+          delimiter: ',',
+        }, function (err, data) {
+          map.on('load', function () {
+            map.addLayer({
+              id: 'csvData',
+              type: 'circle',
+              source: {
+                type: 'geojson',
+                data: data,
+              },
+              paint: {
+    'circle-radius': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      2, 2, // initial radius of 0
+      5, 5 // radius of 5 at zoom level 5 and above
+    ],
+                'circle-color': 'white',
+                'circle-stroke-width': 7,
+                'circle-stroke-color': 'rgba(0, 0, 0, 0)'
+              }
+            });
+
+            map.on('click', 'csvData', function (e) {
+              var coordinates = e.features[0].geometry.coordinates.slice();
+              var description =
+                `<h3>` + e.features[0].properties.MarkerID + `</h3>` +
+                `<h4>` + `<b>` + `Coordinates: ` + `</b>` + e.features[0].properties.Coordinates + `</h4>` +
+                `<h4>` + `<b>` + `Cruising Zone: ` + `</b>` + e.features[0].properties.Challenge_Zone + `</h4>`;
+
+              while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+              }
+
+              new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(description)
+                .addTo(map);
+            });
+
+            map.on('mouseenter', 'csvData', function () {
+              map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', 'csvData', function () {
+              map.getCanvas().style.cursor = '';
+            });
+
+            var bbox = turf.bbox(data);
+            map.fitBounds(bbox, { padding: 50 });
+          });
+        });
+      }
+
+      function makeGeoJSONDuplicate(csvData) {
+        csv2geojson.csv2geojson(csvData, {
+          latfield: 'Latitude',
+          lonfield: 'Longitude',
+          delimiter: ',',
+        }, function (err, data) {
+          var uniqueCourses = getUniqueCourses(data);
+
+          map.on('load', function () {
+            map.addLayer({
+              id: 'csvDataDuplicate',
+              type: 'circle',
+              source: {
+                type: 'geojson',
+                data: data,
+              },
+              paint: {
+    'circle-radius': [
+      'interpolate',
+      ['linear'],
+      ['zoom'],
+      1, 1, // initial radius of 0
+      7, 5 // radius of 5 at zoom level 5 and above
+    ],
+                'circle-color': 'red',
+                'circle-stroke-width': 7,
+                'circle-stroke-color': 'rgba(0, 0, 0, 0)'
+              }
+            });
+
+            map.on('click', 'csvDataDuplicate', function (e) {
+              var coordinates = e.features[0].geometry.coordinates.slice();
+              var description = `<h3>` + e.features[0].properties.MarkerID + `</h3>` + `<h4>` + `<b>` + `Coordinates: ` + `</b>` + e.features[0].properties.Coordinates + `</h4>` + `<h4>` + `<b>` + `Type of point: ` + `</b>` + e.features[0].properties.Point + `<h4>` + `<b>` + `Type of race: ` + `</b>` + e.features[0].properties.Type + `</h4>` + `<h4>` + `<b>` + `Reference: ` + `</b>` + e.features[0].properties.Reference + `</h4>` + `<h4>` + `<b>` + `Race course n° ` + `</b>` + e.features[0].properties.Course +  `<h4>` + `<b>` + `Challenge: ` + `</b>` + e.features[0].properties.Challenge + `</h4>`;
+
+
+              while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+              }
+
+              new mapboxgl.Popup()
+                .setLngLat(coordinates)
+                .setHTML(description)
+                .addTo(map);
+            });
+
+            map.on('mouseenter', 'csvDataDuplicate', function () {
+              map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', 'csvDataDuplicate', function () {
+              map.getCanvas().style.cursor = '';
+            });
+
+            var bbox = turf.bbox(data);
+            map.fitBounds(bbox, { padding: 50 });
+
+            connectMarkers(data, uniqueCourses);
+          });
+        });
+      }
+
+      function getUniqueCourses(data) {
+        var uniqueCourses = [];
+        data.features.forEach(function (feature) {
+          var course = feature.properties.Course;
+          if (!uniqueCourses.includes(course)) {
+            uniqueCourses.push(course);
+          }
+        });
+        return uniqueCourses;
+      }
+
+      function connectMarkers(data, uniqueCourses) {
+        var lines = [];
+
+        uniqueCourses.forEach(function (course) {
+          var courseMarkers = data.features.filter(function (feature) {
+            return feature.properties.Course === course;
+          });
+
+          for (var i = 0; i < courseMarkers.length - 1; i++) {
+            var start = courseMarkers[i].geometry.coordinates;
+            var end = courseMarkers[i + 1].geometry.coordinates;
+            var line = turf.lineString([start, end]);
+            lines.push(line);
+          }
+        });
+
+        var geojson = turf.featureCollection(lines);
+
+        map.addLayer({
+          id: 'courseLines',
+          type: 'line',
+          source: {
+            type: 'geojson',
+            data: geojson,
+          },
+          paint: {
+            'line-color': 'red',
+            'line-width': 2,
+          },
+        });
+        
+      }
+    });
+  </script>
+</body>
+
+</html>
