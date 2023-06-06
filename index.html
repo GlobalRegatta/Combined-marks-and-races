@@ -123,14 +123,16 @@
           lonfield: 'Longitude',
           delimiter: ',',
         }, function (err, data) {
-          map.on('load', function () {
+        map.on('load', function () {
+        map.addSource('csvData', {
+        type: 'geojson',
+        data: data,
+      });
+          
             map.addLayer({
               id: 'csvData',
               type: 'circle',
-              source: {
-                type: 'geojson',
-                data: data,
-              },
+              source: 'csvData',
               paint:  {
     'circle-radius': [
       'interpolate',
