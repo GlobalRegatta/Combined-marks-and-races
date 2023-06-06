@@ -95,6 +95,8 @@
       zoom: 5, // starting zoom
       transformRequest: transformRequest,
     });
+// Add zoom and rotation controls to the map.
+  map.addControl(new mapboxgl.NavigationControl());
 
     $(document).ready(function () {
       $.ajax({
@@ -129,13 +131,13 @@
                 type: 'geojson',
                 data: data,
               },
-              paint: {
+              paint:  {
     'circle-radius': [
       'interpolate',
       ['linear'],
       ['zoom'],
       2, 2, // initial radius of 0
-      5, 5 // radius of 5 at zoom level 5 and above
+      8, 5 // radius of 5 at zoom level 5 and above
     ],
                 'circle-color': 'white',
                 'circle-stroke-width': 7,
@@ -174,112 +176,132 @@
         });
       }
 
-      function makeGeoJSONDuplicate(csvData) {
-        csv2geojson.csv2geojson(csvData, {
-          latfield: 'Latitude',
-          lonfield: 'Longitude',
-          delimiter: ',',
-        }, function (err, data) {
-          var uniqueCourses = getUniqueCourses(data);
+function makeGeoJSONDuplicate(csvData) {
+  csv2geojson.csv2geojson(csvData, {
+    latfield: 'Latitude',
+    lonfield: 'Longitude',
+    delimiter: ',',
+  }, function (err, data) {
+    map.on('load', function () {
+      map.addSource('csvDataDuplicate', {
+        type: 'geojson',
+        data: data,
+      });
 
-          map.on('load', function () {
-            map.addLayer({
-              id: 'csvDataDuplicate',
-              type: 'circle',
-              source: {
-                type: 'geojson',
-                data: data,
-              },
-              paint: {
-    'circle-radius': [
-      'interpolate',
-      ['linear'],
-      ['zoom'],
-      1, 1, // initial radius of 0
-      7, 5 // radius of 5 at zoom level 5 and above
-    ],
-                'circle-color': 'red',
-                'circle-stroke-width': 7,
-                'circle-stroke-color': 'rgba(0, 0, 0, 0)'
-              }
-            });
+      var courses = getUniqueValues(data.features, 'Course');
+      var courseColors = {};
 
-            map.on('click', 'csvDataDuplicate', function (e) {
-              var coordinates = e.features[0].geometry.coordinates.slice();
-              var description = `<h3>` + e.features[0].properties.MarkerID + `</h3>` + `<h4>` + `<b>` + `Coordinates: ` + `</b>` + e.features[0].properties.Coordinates + `</h4>` + `<h4>` + `<b>` + `Type of point: ` + `</b>` + e.features[0].properties.Point + `<h4>` + `<b>` + `Type of race: ` + `</b>` + e.features[0].properties.Type + `</h4>` + `<h4>` + `<b>` + `Reference: ` + `</b>` + e.features[0].properties.Reference + `</h4>` + `<h4>` + `<b>` + `Race course n° ` + `</b>` + e.features[0].properties.Course +  `<h4>` + `<b>` + `Challenge: ` + `</b>` + e.features[0].properties.Challenge + `</h4>`;
+      courses.forEach(function (course) {
+        var color = getRandomColor();
+        courseColors[course] = color;
 
+        var lineFeatures = getLineFeatures(data.features, 'Course', course);
 
-              while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-              }
-
-              new mapboxgl.Popup()
-                .setLngLat(coordinates)
-                .setHTML(description)
-                .addTo(map);
-            });
-
-            map.on('mouseenter', 'csvDataDuplicate', function () {
-              map.getCanvas().style.cursor = 'pointer';
-            });
-
-            map.on('mouseleave', 'csvDataDuplicate', function () {
-              map.getCanvas().style.cursor = '';
-            });
-
-            var bbox = turf.bbox(data);
-            map.fitBounds(bbox, { padding: 50 });
-
-            connectMarkers(data, uniqueCourses);
-          });
+        map.addSource('lineData-' + course, {
+          type: 'geojson',
+          data: lineFeatures,
         });
-      }
-
-      function getUniqueCourses(data) {
-        var uniqueCourses = [];
-        data.features.forEach(function (feature) {
-          var course = feature.properties.Course;
-          if (!uniqueCourses.includes(course)) {
-            uniqueCourses.push(course);
-          }
-        });
-        return uniqueCourses;
-      }
-
-      function connectMarkers(data, uniqueCourses) {
-        var lines = [];
-
-        uniqueCourses.forEach(function (course) {
-          var courseMarkers = data.features.filter(function (feature) {
-            return feature.properties.Course === course;
-          });
-
-          for (var i = 0; i < courseMarkers.length - 1; i++) {
-            var start = courseMarkers[i].geometry.coordinates;
-            var end = courseMarkers[i + 1].geometry.coordinates;
-            var line = turf.lineString([start, end]);
-            lines.push(line);
-          }
-        });
-
-        var geojson = turf.featureCollection(lines);
 
         map.addLayer({
-          id: 'courseLines',
+          id: 'lines-' + course,
           type: 'line',
-          source: {
-            type: 'geojson',
-            data: geojson,
-          },
+          source: 'lineData-' + course,
           paint: {
-            'line-color': 'red',
+            'line-color': color,
             'line-width': 2,
           },
         });
-        
+      });
+
+      map.addLayer({
+        id: 'points',
+        type: 'circle',
+        source: 'csvDataDuplicate',
+        paint: {
+          'circle-radius': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              1, 1, // initial radius of 0
+              8, 5 // radius of 5 at zoom level 5 and above
+            ],
+          'circle-color': ['get', ['to-string', ['get', 'Course']], ['literal', courseColors]],
+        },
+      });
+
+      map.on('click', 'points', function (e) {
+        var coordinates = e.features[0].geometry.coordinates.slice();
+        var properties = e.features[0].properties;
+
+        var description = `<h3>` + e.features[0].properties.MarkerID + `</h3>` + `<h4>` + `<b>` + `Coordinates: ` + `</b>` + e.features[0].properties.Coordinates + `</h4>` + `<h4>` + `<b>` + `Type of point: ` + `</b>` + e.features[0].properties.Point + `<h4>` + `<b>` + `Type of race: ` + `</b>` + e.features[0].properties.Type + `</h4>` + `<h4>` + `<b>` + `Reference: ` + `</b>` + e.features[0].properties.Reference + `</h4>` + `<h4>` + `<b>` + `Race course n° ` + `</b>` + e.features[0].properties.Course + `<h4>` + `<b>` + `Challenge: ` + `</b>` + e.features[0].properties.Challenge + `</h4>`;
+
+        new mapboxgl.Popup()
+          .setLngLat(coordinates)
+          .setHTML(description)
+          .addTo(map);
+      });
+
+      map.on('mouseenter', 'points', function () {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+
+      map.on('mouseleave', 'points', function () {
+        map.getCanvas().style.cursor = '';
+      });
+
+      var bbox = turf.bbox(data);
+      map.fitBounds(bbox, { padding: 50 });
+    });
+  });
+}
+
+      function getUniqueValues(features, property) {
+        var values = [];
+
+        features.forEach(function (feature) {
+          var value = feature.properties[property];
+
+          if (values.indexOf(value) === -1) {
+            values.push(value);
+          }
+        });
+
+        return values;
+      }
+
+      function getLineFeatures(features, property, value) {
+        var lineFeatures = [];
+        var lineStringCoordinates = [];
+
+        features.forEach(function (feature) {
+          if (feature.properties[property] === value) {
+            var coordinates = feature.geometry.coordinates;
+
+            if (coordinates && coordinates.length === 2) {
+              lineStringCoordinates.push(coordinates);
+            }
+          }
+        });
+
+        if (lineStringCoordinates.length > 1) {
+          var lineString = turf.lineString(lineStringCoordinates);
+          lineFeatures.push(lineString);
+        }
+
+        return turf.featureCollection(lineFeatures);
+      }
+
+      function getRandomColor() {
+        var letters = '0123456789ABCDEF';
+        var color = '#';
+
+        for (var i = 0; i < 6; i++) {
+          color += letters[Math.floor(Math.random() * 16)];
+        }
+
+        return color;
       }
     });
   </script>
 </body>
-
 </html>
