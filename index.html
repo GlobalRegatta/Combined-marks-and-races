@@ -228,6 +228,8 @@ function makeGeoJSONDuplicate(csvData) {
               8, 5 // radius of 5 at zoom level 5 and above
             ],
           'circle-color': ['get', ['to-string', ['get', 'Course']], ['literal', courseColors]],
+        'circle-stroke-width': 7,
+                'circle-stroke-color': 'rgba(0, 0, 0, 0)'
         },
       });
 
