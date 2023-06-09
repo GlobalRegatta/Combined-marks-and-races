@@ -295,16 +295,16 @@ function makeGeoJSONDuplicate(csvData) {
         return turf.featureCollection(lineFeatures);
       }
 
-      function getRandomColor() {
-        var letters = '0123456789ABCDEF';
-        var color = '#';
+function getRandomColor() {
+  var red = Math.floor(Math.random() * 128) + 128; // Generate random value between 128 and 255 for red component
+  var green = Math.floor(Math.random() * 128); // Generate random value between 0 and 127 for green component
+  var blue = Math.floor(Math.random() * 128); // Generate random value between 0 and 127 for blue component
 
-        for (var i = 0; i < 6; i++) {
-          color += letters[Math.floor(Math.random() * 16)];
-        }
+  var color = '#' + red.toString(16).padStart(2, '0') + green.toString(16).padStart(2, '0') + blue.toString(16).padStart(2, '0');
 
-        return color;
-      }
+  return color;
+}
+
     });
   </script>
 </body>
